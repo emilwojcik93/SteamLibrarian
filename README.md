@@ -330,6 +330,9 @@ IMPORTANT NOTES:
 =======================================
 ```
 
+### Demo:
+https://github.com/user-attachments/assets/12b91117-36be-4830-a78c-e369279bb782
+
 ## Advanced Usage
 
 ### Combining with Other Tools
