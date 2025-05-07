@@ -320,7 +320,7 @@ powershell.exe -ExecutionPolicy Bypass -File "C:\Users\ewojcik\Documents\SteamLi
 For Apollo/Sunshine configuration:
 ----------------------------------------
 Application Name: SnowRunner
-Detached Command: powershell.exe -ExecutionPolicy Bypass -File "C:\Users\ewojcik\Documents\SteamLibrarian\SteamLibrarian.ps1" -AppId 1465360 -LaunchGame -WaitForExit
+Command: powershell.exe -ExecutionPolicy Bypass -File "C:\Users\ewojcik\Documents\SteamLibrarian\SteamLibrarian.ps1" -AppId 1465360 -LaunchGame -WaitForExit
 ----------------------------------------
 
 IMPORTANT NOTES:
