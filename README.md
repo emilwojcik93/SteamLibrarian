@@ -330,8 +330,30 @@ IMPORTANT NOTES:
 =======================================
 ```
 
+### Example config:
+apps.json
+```json
+        {
+            "allow-client-commands": true,
+            "auto-detach": true,
+            "cmd": "powershell.exe -ExecutionPolicy Bypass -File \"C:\\path\\to\\SteamLibrarian.ps1\" -AppId 1465360 -LaunchGame -WaitForExit",
+            "elevated": false,
+            "exclude-global-prep-cmd": false,
+            "exit-timeout": 1,
+            "image-path": "C:\\Program Files\\Apollo\\config/covers/igdb_107215.png",
+            "name": "SnowRunner",
+            "output": "",
+            "per-client-app-identity": false,
+            "scale-factor": 100,
+            "use-app-identity": false,
+            "uuid": "24826EAD-965A-B026-9C8D-F77F5862D05B",
+            "virtual-display": true,
+            "wait-all": true
+        }
+```
+
 ### Demo:
-https://github.com/user-attachments/assets/12b91117-36be-4830-a78c-e369279bb782
+https://github.com/user-attachments/assets/5458d21c-2e08-4c1f-8082-d3437f58dc6c
 
 ## Advanced Usage
 
