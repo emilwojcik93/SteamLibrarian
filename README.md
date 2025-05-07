@@ -45,6 +45,25 @@ if (-not (Test-Path $apolloScriptPath)) {
 Start-Process powershell -Verb RunAs -ArgumentList "-Command", "Invoke-RestMethod -Uri 'https://raw.githubusercontent.com/emilwojcik93/SteamLibrarian/main/SteamLibrarian.ps1' -OutFile '$apolloScriptPath\SteamLibrarian.ps1'"
 ```
 
+### Option 3: Save to Documents PowerShell Scripts Folder
+
+Install to your personal PowerShell scripts folder in Documents:
+
+```powershell
+# Create PowerShell scripts folder in Documents if it doesn't exist
+$documentsPath = [Environment]::GetFolderPath("MyDocuments")
+$scriptsFolder = Join-Path $documentsPath "PowerShell\Scripts"
+if (-not (Test-Path $scriptsFolder)) {
+    New-Item -ItemType Directory -Path $scriptsFolder -Force
+}
+
+# Download script to Documents PowerShell Scripts folder
+Invoke-RestMethod -Uri "https://raw.githubusercontent.com/emilwojcik93/SteamLibrarian/main/SteamLibrarian.ps1" -OutFile "$scriptsFolder\SteamLibrarian.ps1"
+
+Write-Host "Script installed to $scriptsFolder\SteamLibrarian.ps1"
+Write-Host "You can run it with: & '$scriptsFolder\SteamLibrarian.ps1' -ListGames"
+```
+
 > [!NOTE]  
 > If you encounter execution policy issues, you may need to change the execution policy:
 > ```powershell
