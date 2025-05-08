@@ -601,6 +601,34 @@ function Start-SteamGame {
 }
 
 function Wait-SteamGameExit {
+    <#
+    .SYNOPSIS
+    Waits for a Steam game to start and then exit.
+
+    .DESCRIPTION
+    This function monitors the system for a launched Steam game and waits until it exits.
+    It uses multiple detection methods including:
+    1. Checking Steam registry entries for running games
+    2. Monitoring for executable files from the game's installation directory
+    3. Detecting new processes with main windows (fallback method)
+    
+    The function prioritizes finding actual game executables rather than launchers or installers.
+
+    .PARAMETER AppId
+    The Steam AppID of the game to monitor.
+
+    .PARAMETER GameInfo
+    Game information object containing install path and other details.
+
+    .PARAMETER MaxWaitSeconds
+    Maximum time to wait for game to start in seconds.
+
+    .PARAMETER PollIntervalSeconds
+    How frequently to check if the game is still running, in seconds.
+
+    .OUTPUTS
+    System.Boolean. Returns $true if game exit was detected successfully, $false otherwise.
+    #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)]
@@ -623,10 +651,56 @@ function Wait-SteamGameExit {
     $gameRunningByRegistry = $false
     $gameRunningByProcess = $false
     $gameProcesses = @()
+    $potentialGameExecutables = @()
+    
+    # Try to identify potential game executables from installation directory if available
+    if ($GameInfo -and (Test-Path $GameInfo.InstallPath)) {
+        Write-Verbose "Searching for potential game executables in $($GameInfo.InstallPath)"
+        
+        # Collect all executables in the game directory, prioritizing likely game binaries
+        try {
+            # Ignore common installer/utility executables
+            $ignorePatterns = @(
+                "*unins*.exe", "*setup*.exe", "*install*.exe", "*redist*",
+                "*vcredist*.exe", "*directx*.exe", "*launcher*.exe", 
+                "*crash*.exe", "*report*.exe", "*update*.exe"
+            )
+            
+            # Search for executables with reasonable depth limitation
+            $allExeFiles = Get-ChildItem -Path $GameInfo.InstallPath -Filter "*.exe" -Recurse -Depth 3 -ErrorAction SilentlyContinue
+            
+            # Filter and sort executables by size (larger files are more likely to be the main game)
+            $potentialGameExecutables = $allExeFiles | 
+                Where-Object {
+                    $skipFile = $false
+                    foreach ($pattern in $ignorePatterns) {
+                        if ($_.Name -like $pattern) {
+                            $skipFile = $true
+                            break
+                        }
+                    }
+                    -not $skipFile
+                } | 
+                Sort-Object -Property Length -Descending |
+                Select-Object -First 5
+            
+            if ($potentialGameExecutables.Count -gt 0) {
+                Write-Verbose "Found $($potentialGameExecutables.Count) potential game executables:"
+                $potentialGameExecutables | ForEach-Object {
+                    Write-Verbose "  - $($_.Name) (Size: $([Math]::Round($_.Length / 1MB, 2)) MB)"
+                }
+            } else {
+                Write-Verbose "No potential game executables found in game directory."
+            }
+        }
+        catch {
+            Write-Verbose "Error searching for game executables: $_"
+        }
+    }
     
     # Get initial processes before game launch
     $initialProcesses = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | 
-                         Select-Object Id, Name, MainWindowTitle, Path, StartTime, CPU, WorkingSet
+                        Select-Object Id, Name, MainWindowTitle, Path, StartTime, CPU, WorkingSet
     
     # Wait for game to start
     $timer = 0
@@ -648,7 +722,71 @@ function Wait-SteamGameExit {
             }
         }
         
-        # Check method 2: Process monitoring
+        # Check method 2: Known game executables from install directory
+        if (-not $gameStarted -and $potentialGameExecutables.Count -gt 0) {
+            $currentProcesses = Get-Process -ErrorAction SilentlyContinue
+            
+            foreach ($exeFile in $potentialGameExecutables) {
+                $exeName = [System.IO.Path]::GetFileNameWithoutExtension($exeFile.Name)
+                $matchingProcess = $currentProcesses | Where-Object { $_.Name -eq $exeName }
+                
+                if ($matchingProcess) {
+                    # Found a matching process from our known game executables
+                    foreach ($process in $matchingProcess) {
+                        try {
+                            # Ensure this is a new process (wasn't in our initial list)
+                            $isNewProcess = -not ($initialProcesses | Where-Object { $_.Id -eq $process.Id })
+                            
+                            if ($isNewProcess) {
+                                $gameProcesses += $process
+                                $gameStarted = $true
+                                $gameRunningByProcess = $true
+                                
+                                # Display details about the detected game process
+                                Write-Host "`n=== Detected Game Process (from known executables) ===" -ForegroundColor Green
+                                Write-Host "Process Name: " -NoNewline -ForegroundColor Cyan; Write-Host $process.Name
+                                Write-Host "Process ID:   " -NoNewline -ForegroundColor Cyan; Write-Host $process.Id
+                                
+                                try {
+                                    if ($process.MainWindowTitle) {
+                                        Write-Host "Window Title: " -NoNewline -ForegroundColor Cyan; Write-Host $process.MainWindowTitle
+                                    }
+                                } catch { }
+                                
+                                try {
+                                    if ($process.Path) {
+                                        Write-Host "Executable:   " -NoNewline -ForegroundColor Cyan; Write-Host $process.Path
+                                    }
+                                } catch { }
+                                
+                                try {
+                                    if ($process.StartTime) {
+                                        Write-Host "Start Time:   " -NoNewline -ForegroundColor Cyan; Write-Host $process.StartTime
+                                    }
+                                } catch { }
+                                
+                                try {
+                                    $memoryInMB = [math]::Round($process.WorkingSet / 1MB, 2)
+                                    Write-Host "Memory Usage: " -NoNewline -ForegroundColor Cyan; Write-Host "$memoryInMB MB"
+                                } catch { }
+                                
+                                Write-Host "==========================`n" -ForegroundColor Green
+                                
+                                Write-LogMessage "Game process detected: $($process.Name) (PID: $($process.Id)) [From known game executable]" -Type "Success"
+                                break
+                            }
+                        }
+                        catch {
+                            # Process may have ended already
+                        }
+                    }
+                }
+                
+                if ($gameStarted) { break }
+            }
+        }
+        
+        # Check method 3: Process monitoring (fallback)
         if (-not $gameStarted) {
             $currentProcesses = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | 
                               Select-Object Id, Name, MainWindowTitle, Path, StartTime, CPU, WorkingSet
@@ -661,14 +799,20 @@ function Wait-SteamGameExit {
             if ($newProcesses.Count -gt 0) {
                 foreach ($process in $newProcesses) {
                     try {
-                        # Skip the Steam process itself
-                        if ($process.Name -notlike "*steam*" -and $process.MainWindowHandle -ne 0) {
+                        # Skip the Steam process itself and other typical non-game processes
+                        if ($process.Name -notlike "*steam*" -and 
+                            $process.Name -notlike "*crash*" -and 
+                            $process.Name -notlike "*report*" -and
+                            $process.Name -notlike "*helper*" -and
+                            $process.Name -notlike "*update*" -and
+                            $process.MainWindowHandle -ne 0) {
+                            
                             $gameProcesses += $process
                             $gameStarted = $true
                             $gameRunningByProcess = $true
                             
                             # Display details about the detected game process
-                            Write-Host "`n=== Detected Game Process ===" -ForegroundColor Green
+                            Write-Host "`n=== Detected Game Process (by window handle) ===" -ForegroundColor Green
                             Write-Host "Process Name: " -NoNewline -ForegroundColor Cyan; Write-Host $process.Name
                             Write-Host "Process ID:   " -NoNewline -ForegroundColor Cyan; Write-Host $process.Id
                             
@@ -688,7 +832,7 @@ function Wait-SteamGameExit {
                             Write-Host "Memory Usage: " -NoNewline -ForegroundColor Cyan; Write-Host "$memoryInMB MB"
                             Write-Host "==========================`n" -ForegroundColor Green
                             
-                            Write-LogMessage "Game process detected: $($process.Name) (PID: $($process.Id))" -Type "Success"
+                            Write-LogMessage "Game process detected: $($process.Name) (PID: $($process.Id)) [By window handle]" -Type "Success"
                         }
                     }
                     catch {

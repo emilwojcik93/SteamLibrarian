@@ -222,11 +222,25 @@ Some games have external launchers that may cause issues with Apollo/Sunshine in
 - **First-time setup**: Games that require initial setup, DLC installation, or dependency installations should be run manually first.
 - **Windows UAC Prompts**: Games that trigger UAC (User Account Control) prompts may not work correctly with Apollo integration.
 
+### Process Detection Method
+
+SteamLibrarian uses a multi-layered approach to identify and monitor game processes:
+
+1. **Known Game Executables**: The script first checks for executables in the game's installation directory and prioritizes monitoring those processes
+2. **Steam Registry**: Monitors the Steam registry entries for running games
+3. **Window Handle Detection**: Falls back to detecting new processes with window handles as a last resort
+
+This prioritized approach greatly improves reliability with games that:
+- Launch multiple processes
+- Use setup/dependency installers
+- Have external launchers
+
 ### Solutions
 
-1. **Incorrect Process Detection**: If SteamLibrarian incorrectly detects launcher processes or installs as the main game:
+1. **Incorrect Process Detection**: If SteamLibrarian incorrectly detects launcher processes or installers as the main game:
    - Launch the game manually at least once to complete all setup steps
    - Look for command line options to skip launchers if available
+   - The script will now prioritize monitoring executables from the game's actual install directory
 
 2. **Test Thoroughly**: Always test games with `-LaunchGame -WaitForExit` parameters before adding to Apollo
 
