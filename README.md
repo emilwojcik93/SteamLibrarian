@@ -72,6 +72,13 @@ Write-Host "You can run it with: & '$scriptsFolder\SteamLibrarian.ps1' -ListGame
 
 ## Basic Usage
 
+### Run Without Parameters (Shows Accounts and Games)
+
+```powershell
+# Simply running the script without parameters shows both accounts and games
+.\SteamLibrarian.ps1
+```
+
 ### List All Steam Games
 
 ```powershell
@@ -120,6 +127,12 @@ Write-Host "You can run it with: & '$scriptsFolder\SteamLibrarian.ps1' -ListGame
 .\SteamLibrarian.ps1 -GameName "Elden Ring" -ShowDetails -Online
 ```
 
+### List All Steam Accounts
+
+```powershell
+.\SteamLibrarian.ps1 -ListSteamAccountIds
+```
+
 ### Generate Apollo/Sunshine Launch Command
 
 ```powershell
@@ -136,11 +149,59 @@ Write-Host "You can run it with: & '$scriptsFolder\SteamLibrarian.ps1' -ListGame
 | `-WaitForExit` | Wait for the game to close after launching                 |
 | `-ShowDetails` | Show comprehensive game information                        |
 | `-ListGames` | Display all installed Steam games                          |
+| `-ListSteamAccountIds` | List all Steam accounts and show default account      |
 | `-Pass`      | Quick pass-through mode with minimal output                |
 | `-Online`    | Enable online information fetching via Steam API           |
 | `-CopyLaunchCommand` | Copy Apollo/Sunshine integration commands to clipboard |
 | `-SteamAccountId` | Specify a Steam Account ID or nickname to use when launching |
 | `-LaunchParameters` | Additional parameters to pass to the game when launching |
+
+## Steam Account Management
+
+SteamLibrarian now provides advanced features for managing multiple Steam accounts:
+
+### Listing Available Steam Accounts
+
+You can view all Steam accounts that have logged in on your computer:
+
+```powershell
+.\SteamLibrarian.ps1 -ListSteamAccountIds
+```
+
+This will display a list of all accounts, highlighting the default (currently active) account.
+
+### Running Games with Specific Steam Accounts
+
+When you have multiple Steam accounts, you can specify which account to use when launching a game:
+
+```powershell
+.\SteamLibrarian.ps1 -GameName "Portal" -LaunchGame -SteamAccountId "YourSteamUsername"
+```
+
+#### How Steam Account Selection Works
+
+1. When you specify `-SteamAccountId`, the script checks if Steam is already running
+2. If Steam is running, it will close it and restart with the specified account
+3. If Steam is not running, it will start Steam with the specified account credentials
+4. The game will then launch under that Steam account
+
+This is particularly useful if:
+- You have multiple Steam accounts with different game libraries
+- You share a computer with family members but want to launch your own games
+- You need to switch between different regional accounts
+
+### Default Behavior
+
+If you don't specify a `-SteamAccountId`:
+- The script will use whatever Steam account is currently active or was last logged in
+- No Steam restart is performed
+
+### Notes on Account Recognition
+
+- The script reads from Steam's `loginusers.vdf` file to identify available accounts
+- Account recognition works with both account names (login names) and display names
+- The current active (default) account is determined from the Windows registry
+- All game libraries associated with all accounts are shown when using `-ListGames`
 
 ## Integration with Sunshine/Apollo
 

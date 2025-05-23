@@ -13,6 +13,7 @@ This PowerShell script provides comprehensive functionality to manage your Steam
 - Monitoring game processes from launch to exit
 - Direct pass-through mode to quickly find and launch games without interaction
 - Easy display of game metadata and system integration details
+- Multiple Steam account management and switching capabilities
 
 SteamLibrarian works with native Steam installations on Windows without requiring
 additional software or external web services.
@@ -39,6 +40,10 @@ launch options, and registry entries.
 
 .PARAMETER ListGames
 List all installed Steam games with their AppIDs.
+
+.PARAMETER ListSteamAccountIds
+List all Steam account IDs/usernames that have logged in on this computer,
+highlighting the default account.
 
 .PARAMETER Pass
 Pass-through mode. Directly find and launch a game with minimal output. When combined with
@@ -117,9 +122,8 @@ System.Management.Automation.PSCustomObject. Returns a custom object with game i
 when running with AppId or GameName parameters.
 
 .NOTES
-File Name      : SteamLibrarian.ps1 (formerly LaunchSteamGame.ps1)
-Author         : GitHub Copilot
-Version        : 1.4
+File Name      : SteamLibrarian.ps1
+Version        : 1.5
 Creation Date  : May 7, 2025
 Last Update    : May 23, 2025
 Requires       : PowerShell 5.0 or later
@@ -162,6 +166,9 @@ param (
     
     [Parameter(ParameterSetName="List")]
     [switch]$ListGames,
+    
+    [Parameter(ParameterSetName="List")]
+    [switch]$ListSteamAccountIds,
     
     [Parameter(ParameterSetName="ByAppId")]
     [Parameter(ParameterSetName="ByName")]
@@ -435,6 +442,169 @@ function Get-SteamLibraryFolders {
     return $libraryFolders
 }
 #endregion Steam Location Functions
+
+#region Steam Account Management Functions
+function Get-SteamAccountIds {
+    <#
+    .SYNOPSIS
+    Gets all Steam account IDs/usernames that have logged in on this computer.
+
+    .DESCRIPTION
+    Reads the Steam loginusers.vdf file to find all Steam accounts that have logged in.
+    Also identifies the currently active (default) account.
+
+    .PARAMETER SteamPath
+    The path to the Steam installation directory.
+
+    .OUTPUTS
+    System.Array. Returns an array of custom objects with Steam account information.
+
+    .EXAMPLE
+    $accounts = Get-SteamAccountIds -SteamPath "C:\Program Files (x86)\Steam"
+    foreach ($account in $accounts) {
+        Write-Host "Account: $($account.AccountName) - Last Login: $($account.LastLogin)"
+    }
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [string]$SteamPath = ""
+    )
+    
+    if (-not $SteamPath) {
+        $SteamPath = Get-SteamPath
+    }
+    
+    if (-not $SteamPath) {
+        Write-LogMessage "Steam installation not found" -Type "Error"
+        return $null
+    }
+    
+    $loginUsersFile = Join-Path -Path $SteamPath -ChildPath "config\loginusers.vdf"
+    if (-not (Test-Path $loginUsersFile)) {
+        Write-LogMessage "Steam loginusers.vdf file not found at $loginUsersFile" -Type "Error"
+        return $null
+    }
+    
+    $content = Get-Content $loginUsersFile -Raw
+    $accounts = @()
+    
+    # Get the active account from registry
+    $activeAccountId = $null
+    try {
+        $registryPath = Get-ItemProperty -Path "HKCU:\Software\Valve\Steam" -ErrorAction SilentlyContinue
+        if ($registryPath -and $registryPath.AutoLoginUser) {
+            $activeAccountId = $registryPath.AutoLoginUser
+        }
+    }
+    catch {
+        Write-LogMessage "Could not determine active Steam account from registry" -Type "Warning"
+    }
+    
+    # Parse the loginusers.vdf file
+    # Sample format:
+    # "users"
+    # {
+    #   "12345678901234567"
+    #   {
+    #     "AccountName"    "username"
+    #     "PersonaName"    "Display Name"
+    #     "RememberPassword"    "1"
+    #     "MostRecent"     "1"
+    #     "Timestamp"      "1589784000"
+    #   }
+    # }
+    
+    if ($content -match '"users"\s*{(.*)}') {
+        $usersSection = $matches[1]
+        
+        # Extract each user section
+        $userPattern = '"(\d+)"\s*{([^}]+)}'
+        $userMatches = [regex]::Matches($usersSection, $userPattern)
+        
+        foreach ($userMatch in $userMatches) {
+            $steamId = $userMatch.Groups[1].Value
+            $userProperties = $userMatch.Groups[2].Value
+            
+            # Extract account properties
+            $accountName = if ($userProperties -match '"AccountName"\s*"([^"]+)"') { $matches[1] } else { "Unknown" }
+            $personaName = if ($userProperties -match '"PersonaName"\s*"([^"]+)"') { $matches[1] } else { $accountName }
+            $mostRecent = if ($userProperties -match '"MostRecent"\s*"(\d+)"') { [bool]::Parse($matches[1]) } else { $false }
+            $timestamp = if ($userProperties -match '"Timestamp"\s*"(\d+)"') { 
+                # Convert Unix timestamp to DateTime
+                [DateTimeOffset]::FromUnixTimeSeconds([long]$matches[1]).DateTime
+            } else { 
+                [DateTime]::MinValue 
+            }
+            
+            # Determine if this is the active account
+            $isActive = ($accountName -eq $activeAccountId) -or ($mostRecent -and -not $activeAccountId)
+            
+            $account = [PSCustomObject]@{
+                SteamId = $steamId
+                AccountName = $accountName
+                PersonaName = $personaName
+                IsActive = $isActive
+                LastLogin = $timestamp
+            }
+            
+            $accounts += $account
+        }
+    }
+    
+    # Sort by LastLogin (most recent first)
+    return $accounts | Sort-Object -Property LastLogin -Descending
+}
+
+function Show-SteamAccountIds {
+    <#
+    .SYNOPSIS
+    Displays all Steam account IDs/usernames that have logged in on this computer.
+
+    .DESCRIPTION
+    Lists all Steam accounts that have logged in, highlighting the currently active account.
+
+    .PARAMETER SteamPath
+    The path to the Steam installation directory.
+
+    .EXAMPLE
+    Show-SteamAccountIds
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$false)]
+        [string]$SteamPath = ""
+    )
+    
+    $accounts = Get-SteamAccountIds -SteamPath $SteamPath
+    
+    if (-not $accounts -or $accounts.Count -eq 0) {
+        Write-LogMessage "No Steam accounts found" -Type "Warning"
+        return
+    }
+    
+    Write-Host "`n-- Steam Accounts --" -ForegroundColor Cyan
+    Write-Host "Default account is marked with *`n"
+    
+    foreach ($account in $accounts) {
+        if ($account.IsActive) {
+            Write-Host "* " -ForegroundColor Green -NoNewline
+        } else {
+            Write-Host "  " -NoNewline
+        }
+        
+        Write-Host "$($account.AccountName)" -ForegroundColor White -NoNewline
+        Write-Host " (Display Name: " -NoNewline
+        Write-Host "$($account.PersonaName)" -ForegroundColor Yellow -NoNewline
+        Write-Host ")"
+        Write-Host "    Last login: $($account.LastLogin)" -ForegroundColor Gray
+    }
+    
+    Write-Host "`nTo launch a game with a specific account, use:" -NoNewline
+    Write-Host " -SteamAccountId <AccountName>" -ForegroundColor Yellow
+    Write-Host "Example: .\SteamLibrarian.ps1 -GameName `"Portal`" -LaunchGame -SteamAccountId `"$($accounts[0].AccountName)`"`n"
+}
+#endregion Steam Account Management Functions
 
 #region Game Management Functions
 function Get-InstalledSteamGames {
@@ -1174,7 +1344,7 @@ function Show-GameDetails {
                                         Write-Host "  Found executable files:" -ForegroundColor Green
                                         $foundExes = $true
                                     }
-                                    Write-Host "  - `"$($exe.Name)`"" -ForegroundColor White
+                                    Write-Host "  - `"$($exe.Name)`" -ForegroundColor White
                                     Write-Host "    Size: $exeSize MB" -ForegroundColor DarkGray
                                 }
                             }
@@ -1198,7 +1368,7 @@ function Show-GameDetails {
                                                 Write-Host "  Found executable files:" -ForegroundColor Green
                                                 $foundExes = $true
                                             }
-                                            Write-Host "  - `"$relativePath`"" -ForegroundColor White
+                                            Write-Host "  - `"$relativePath`" -ForegroundColor White
                                             Write-Host "    Size: $exeSize MB" -ForegroundColor DarkGray
                                         }
                                     }
@@ -1226,7 +1396,7 @@ function Show-GameDetails {
                                                 Write-Host "  Found executable files:" -ForegroundColor Green
                                                 $foundExes = $true
                                             }
-                                            Write-Host "  - `"$relativePath`"" -ForegroundColor White
+                                            Write-Host "  - `"$relativePath`" -ForegroundColor White
                                             Write-Host "    Size: $exeSize MB" -ForegroundColor DarkGray
                                         }
                                     }
@@ -1682,7 +1852,7 @@ function Show-GameDetails {
         Write-Host "  ProtonDB:      " -NoNewline; Write-Host "https://www.protondb.com/app/$($GameInfo.AppId)" -ForegroundColor Blue
     }
     
-    # Steam shortcuts
+    # Steam commands
     Write-Host "`nSteam Commands:" -ForegroundColor Cyan
     Write-Host "  Run Game:         " -NoNewline; Write-Host "steam://run/$($GameInfo.AppId)" -ForegroundColor Yellow
     Write-Host "  Game Store Page:  " -NoNewline; Write-Host "steam://store/$($GameInfo.AppId)" -ForegroundColor Yellow
@@ -1722,6 +1892,10 @@ function LaunchSteamGame {
 
     .PARAMETER ListGames
     List all installed Steam games with their AppIDs.
+    
+    .PARAMETER ListSteamAccountIds
+    List all Steam account IDs/usernames that have logged in on this computer,
+    highlighting the default account.
 
     .PARAMETER Pass
     Pass-through mode. Directly find and launch a game with minimal output.
@@ -1767,6 +1941,9 @@ function LaunchSteamGame {
         [Parameter(ParameterSetName="List")]
         [switch]$ListGames,
         
+        [Parameter(ParameterSetName="List")]
+        [switch]$ListSteamAccountIds,
+        
         [Parameter(ParameterSetName="ByAppId")]
         [Parameter(ParameterSetName="ByName")]
         [switch]$Pass,
@@ -1804,6 +1981,13 @@ function LaunchSteamGame {
     # Get list of installed Steam games
     $installedGames = Get-InstalledSteamGames -SteamPath $steamPath
 
+    # Handle ListSteamAccountIds parameter
+    if ($ListSteamAccountIds) {
+        # Display list of Steam accounts
+        Show-SteamAccountIds -SteamPath $steamPath
+        return 0
+    }
+    
     if ($ListGames) {
         # Display list of installed games
         Write-Host "`n====== INSTALLED STEAM GAMES ======" -ForegroundColor Cyan
@@ -1811,9 +1995,18 @@ function LaunchSteamGame {
         return 0
     }
 
-    # If no parameters specified, show help
+    # If no parameters specified, show both accounts and games
     if (-not $PSBoundParameters.Count) {
-        Get-Help $MyInvocation.MyCommand.Definition -Detailed
+        # Show Steam accounts
+        Show-SteamAccountIds -SteamPath $steamPath
+        
+        # Show installed games
+        Write-Host "`n====== INSTALLED STEAM GAMES ======" -ForegroundColor Cyan
+        $installedGames | Sort-Object Name | Format-Table -Property AppId, Name -AutoSize
+        
+        # Show basic usage hint
+        Write-Host "`nFor detailed help, use: " -NoNewline
+        Write-Host "Get-Help $($MyInvocation.MyCommand.Name) -Detailed" -ForegroundColor Yellow
         return 0
     }
 
@@ -1944,7 +2137,7 @@ function LaunchSteamGame {
                 # Try to find possible executables
                 try {
                     $exeFiles = Get-ChildItem -Path $gameInfo.InstallPath -Filter "*.exe" -File -ErrorAction SilentlyContinue | 
-                        Where-Object { -not $_.Name.ToLower().Contains("unins") } |
+                        Where-Object { -not $_.Name.ToLower().Contains("uninst") } |
                         Sort-Object -Property Length -Descending |
                         Select-Object -First 1
                         

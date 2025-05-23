@@ -1,0 +1,18 @@
+```
+feat: add Steam account management and enhance no-parameter behavior
+
+This commit adds Steam account management functionality and improves the script's behavior when run without parameters.
+
+Changes:
+- Added new `ListSteamAccountIds` parameter to list all Steam accounts that have logged in
+- Enhanced script to show both Steam accounts and games when run without parameters
+- Added `Get-SteamAccountIds` function to retrieve Steam account information
+- Added `Show-SteamAccountIds` function to display Steam accounts with highlighting
+- Updated README.md with comprehensive documentation of Steam account features
+- Added examples for running without parameters and listing Steam accounts
+- Added a dedicated "Steam Account Management" section to the README
+- Explained how Steam account switching works and its use cases
+- Bumped version to 1.5 and updated last modified date
+
+The script now provides an improved user experience by displaying both accounts and games when run without parameters, instead of just showing the help text. Users can now easily see which Steam accounts are available, with the default account clearly marked, making it easier to manage multiple Steam accounts.
+```
