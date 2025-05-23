@@ -90,6 +90,18 @@ Write-Host "You can run it with: & '$scriptsFolder\SteamLibrarian.ps1' -ListGame
 .\SteamLibrarian.ps1 -GameName "Cyberpunk" -LaunchGame
 ```
 
+### Launch a Game with Specific Steam Account
+
+```powershell
+.\SteamLibrarian.ps1 -GameName "Portal" -LaunchGame -SteamAccountId "YourSteamUsername"
+```
+
+### Launch a Game with Custom Parameters
+
+```powershell
+.\SteamLibrarian.ps1 -GameName "Cyberpunk" -LaunchGame -LaunchParameters "-windowed -width 1920 -height 1080"
+```
+
 ### Show Detailed Game Information
 
 ```powershell
@@ -127,6 +139,8 @@ Write-Host "You can run it with: & '$scriptsFolder\SteamLibrarian.ps1' -ListGame
 | `-Pass`      | Quick pass-through mode with minimal output                |
 | `-Online`    | Enable online information fetching via Steam API           |
 | `-CopyLaunchCommand` | Copy Apollo/Sunshine integration commands to clipboard |
+| `-SteamAccountId` | Specify a Steam Account ID or nickname to use when launching |
+| `-LaunchParameters` | Additional parameters to pass to the game when launching |
 
 ## Integration with Sunshine/Apollo
 
@@ -163,11 +177,22 @@ Before adding to Apollo, test the game launch manually to ensure it works proper
 ```powershell
 # Generate the Apollo integration command
 .\SteamLibrarian.ps1 -GameName "SnowRunner" -CopyLaunchCommand
+
+# Generate with Steam account
+.\SteamLibrarian.ps1 -GameName "SnowRunner" -CopyLaunchCommand -SteamAccountId "YourSteamUsername"
+
+# Generate with custom launch parameters
+.\SteamLibrarian.ps1 -GameName "SnowRunner" -CopyLaunchCommand -LaunchParameters "-windowed -width 1920 -height 1080"
 ```
 
 This will copy a command to your clipboard in this format:
 ```
 powershell.exe -ExecutionPolicy Bypass -File "C:\path\to\SteamLibrarian.ps1" -AppId 1465360 -LaunchGame -WaitForExit
+```
+
+Or with custom parameters:
+```
+powershell.exe -ExecutionPolicy Bypass -File "C:\path\to\SteamLibrarian.ps1" -AppId 1465360 -LaunchGame -WaitForExit -SteamAccountId "YourSteamUsername" -LaunchParameters "-windowed -width 1920 -height 1080"
 ```
 
 ### Step 4: Adding to Apollo/Sunshine
@@ -179,6 +204,11 @@ powershell.exe -ExecutionPolicy Bypass -File "C:\path\to\SteamLibrarian.ps1" -Ap
 |-------|-------|
 | Application Name | SnowRunner |
 | Command | powershell.exe -ExecutionPolicy Bypass -File "C:\Program Files\Apollo\scripts\SteamLibrarian.ps1" -AppId 1465360 -LaunchGame -WaitForExit |
+
+For advanced use cases, you can include Steam account selection and custom launch parameters:
+
+| Application Name | SnowRunner (Windowed Mode) |
+| Command | powershell.exe -ExecutionPolicy Bypass -File "C:\Program Files\Apollo\scripts\SteamLibrarian.ps1" -AppId 1465360 -LaunchGame -WaitForExit -LaunchParameters "-windowed -width 1920 -height 1080" |
 
 > [!WARNING]
 > You must use the **Command** field, not "Detached Command". Using "Detached Command" will cause the process to not be observed by Apollo/Sunshine, and the streaming session will not end automatically when the game and script exits.
@@ -356,6 +386,27 @@ apps.json
             "exit-timeout": 1,
             "image-path": "C:\\Program Files\\Apollo\\config/covers/igdb_107215.png",
             "name": "SnowRunner",
+            "output": "",
+            "per-client-app-identity": false,
+            "scale-factor": 100,
+            "use-app-identity": false,
+            "uuid": "24826EAD-965A-B026-9C8D-F77F5862D05B",
+            "virtual-display": true,
+            "wait-all": true
+        }
+```
+
+Example with custom parameters:
+```json
+        {
+            "allow-client-commands": true,
+            "auto-detach": true,
+            "cmd": "powershell.exe -ExecutionPolicy Bypass -File \"C:\\path\\to\\SteamLibrarian.ps1\" -AppId 1465360 -LaunchGame -WaitForExit -SteamAccountId \"YourSteamUsername\" -LaunchParameters \"-windowed -width 1920 -height 1080\"",
+            "elevated": false,
+            "exclude-global-prep-cmd": false,
+            "exit-timeout": 1,
+            "image-path": "C:\\Program Files\\Apollo\\config/covers/igdb_107215.png",
+            "name": "SnowRunner (Windowed)",
             "output": "",
             "per-client-app-identity": false,
             "scale-factor": 100,

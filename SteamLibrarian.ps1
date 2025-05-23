@@ -1,4 +1,4 @@
-# Rename this file to SteamLibrarian.ps1
+# SteamLibrarian.ps1
 #Requires -Version 5.0
 
 <#
@@ -51,6 +51,14 @@ Run the script in online mode. This enables online checks or API calls.
 .PARAMETER CopyLaunchCommand
 Copies a launch command for a Steam game to the clipboard for use with Apollo/Sunshine.
 
+.PARAMETER SteamAccountId
+Specifies a Steam Account ID or nickname to use when launching the game. This is useful when 
+you have multiple Steam accounts and want to launch a game with a specific account.
+
+.PARAMETER LaunchParameters
+Additional parameters to pass to the game when launching it. This is passed as launch options 
+to the Steam client, which then passes them to the game.
+
 .EXAMPLE
 PS> .\SteamLibrarian.ps1 -ListGames
 
@@ -91,6 +99,16 @@ PS> .\SteamLibrarian.ps1 -CopyLaunchCommand -AppId 1465360
 
 Copies the launch command for SnowRunner (AppID: 1465360) to the clipboard.
 
+.EXAMPLE
+PS> .\SteamLibrarian.ps1 -GameName "Expeditions" -LaunchGame -SteamAccountId "YourSteamUsername"
+
+Finds and launches the "Expeditions" game with a specific Steam account.
+
+.EXAMPLE
+PS> .\SteamLibrarian.ps1 -AppId 1465360 -LaunchGame -LaunchParameters "-windowed -width 1920 -height 1080"
+
+Launches SnowRunner with custom launch parameters for window size.
+
 .INPUTS
 None. You cannot pipe objects to SteamLibrarian.ps1.
 
@@ -101,9 +119,9 @@ when running with AppId or GameName parameters.
 .NOTES
 File Name      : SteamLibrarian.ps1 (formerly LaunchSteamGame.ps1)
 Author         : GitHub Copilot
-Version        : 1.3
+Version        : 1.4
 Creation Date  : May 7, 2025
-Last Update    : May 7, 2025
+Last Update    : May 23, 2025
 Requires       : PowerShell 5.0 or later
                  Steam Client installed
 OS             : Windows
@@ -156,7 +174,15 @@ param (
     
     [Parameter(ParameterSetName="ByAppId")]
     [Parameter(ParameterSetName="ByName")]
-    [switch]$CopyLaunchCommand
+    [switch]$CopyLaunchCommand,
+    
+    [Parameter(ParameterSetName="ByAppId")]
+    [Parameter(ParameterSetName="ByName")]
+    [string]$SteamAccountId,
+    
+    [Parameter(ParameterSetName="ByAppId")]
+    [Parameter(ParameterSetName="ByName")]
+    [string]$LaunchParameters
 )
 #endregion Script Parameters
 
@@ -226,9 +252,18 @@ function Copy-LaunchCommand {
 
     .PARAMETER ScriptPath
     The full path to the SteamLibrarian script.
+    
+    .PARAMETER SteamAccountId
+    Optional Steam Account ID or nickname to use for launching the game.
+    
+    .PARAMETER LaunchParameters
+    Optional parameters to pass to the game when launching it.
 
     .EXAMPLE
     Copy-LaunchCommand -AppId 1465360 -GameName "SnowRunner" -ScriptPath "C:\Scripts\SteamLibrarian.ps1"
+    
+    .EXAMPLE
+    Copy-LaunchCommand -AppId 1465360 -GameName "SnowRunner" -ScriptPath "C:\Scripts\SteamLibrarian.ps1" -SteamAccountId "YourSteamUsername" -LaunchParameters "-windowed"
     #>
     [CmdletBinding()]
     param(
@@ -239,11 +274,27 @@ function Copy-LaunchCommand {
         [string]$GameName,
         
         [Parameter(Mandatory=$true)]
-        [string]$ScriptPath
+        [string]$ScriptPath,
+        
+        [Parameter()]
+        [string]$SteamAccountId = "",
+        
+        [Parameter()]
+        [string]$LaunchParameters = ""
     )
     
     # Create the command with default parameters
     $command = "powershell.exe -ExecutionPolicy Bypass -File `"$ScriptPath`" -AppId $AppId -LaunchGame -WaitForExit"
+    
+    # Add Steam account if specified
+    if ($SteamAccountId) {
+        $command += " -SteamAccountId `"$SteamAccountId`""
+    }
+    
+    # Add launch parameters if specified
+    if ($LaunchParameters) {
+        $command += " -LaunchParameters `"$LaunchParameters`""
+    }
     
     try {
         # Copy to clipboard
@@ -559,7 +610,7 @@ function Start-SteamGame {
 
     .DESCRIPTION
     Uses the steam:// protocol to launch a game with the specified AppID.
-    Optional launch options can be provided.
+    Optional launch options and Steam account can be provided.
 
     .PARAMETER AppId
     The Steam AppID of the game to launch.
@@ -567,11 +618,17 @@ function Start-SteamGame {
     .PARAMETER LaunchOptions
     Optional launch options to pass to the game.
 
+    .PARAMETER SteamAccountId
+    Optional Steam Account ID or nickname to use for launching the game.
+
     .OUTPUTS
     System.Boolean. Returns $true if the game launch was attempted, $false on error.
 
     .EXAMPLE
     Start-SteamGame -AppId 440 -LaunchOptions "-windowed -noborder"
+
+    .EXAMPLE
+    Start-SteamGame -AppId 440 -SteamAccountId "YourSteamUsername"
     #>
     [CmdletBinding()]
     param(
@@ -579,7 +636,10 @@ function Start-SteamGame {
         [int]$AppId,
         
         [Parameter()]
-        [string]$LaunchOptions = ""
+        [string]$LaunchOptions = "",
+        
+        [Parameter()]
+        [string]$SteamAccountId = ""
     )
     
     Write-LogMessage "Launching Steam game with AppID: $AppId" -Type "Info"
@@ -587,10 +647,49 @@ function Start-SteamGame {
     try {
         # Use Steam protocol to launch the game
         $steamUrl = "steam://rungameid/$AppId"
+        
+        # Add launch options if provided
         if ($LaunchOptions) {
             $steamUrl += "//$LaunchOptions"
         }
         
+        # Add Steam account if provided
+        if ($SteamAccountId) {
+            Write-LogMessage "Using Steam account: $SteamAccountId" -Type "Info"
+            
+            # Check if Steam is running
+            $steamProcess = Get-Process -Name steam -ErrorAction SilentlyContinue
+            
+            if ($steamProcess) {
+                # Steam is running, we need to restart it with the specified account
+                Write-LogMessage "Steam is already running. Restarting with account $SteamAccountId..." -Type "Info"
+                
+                # Close Steam
+                $steamProcess | ForEach-Object { $_.CloseMainWindow() | Out-Null }
+                Start-Sleep -Seconds 2
+                
+                # Kill any remaining Steam processes
+                Get-Process -Name steam* -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+                Start-Sleep -Seconds 1
+            }
+            
+            # Start Steam with the specified account
+            $steamPath = Get-SteamPath
+            if ($steamPath) {
+                $steamExePath = Join-Path -Path $steamPath -ChildPath "steam.exe"
+                if (Test-Path $steamExePath) {
+                    # Start Steam with the specified account
+                    Start-Process -FilePath $steamExePath -ArgumentList "-login $SteamAccountId"
+                    Write-LogMessage "Waiting for Steam to start with account $SteamAccountId..." -Type "Info"
+                    Start-Sleep -Seconds 5
+                }
+            }
+        } else {
+            # Using default Steam account
+            Write-LogMessage "Using default Steam account" -Type "Info"
+        }
+        
+        # Launch the game
         Start-Process $steamUrl
         return $true
     }
@@ -1632,10 +1731,18 @@ function LaunchSteamGame {
 
     .PARAMETER CopyLaunchCommand
     Copies a launch command for a Steam game to the clipboard for use with Apollo/Sunshine.
+    
+    .PARAMETER SteamAccountId
+    Specifies a Steam Account ID or nickname to use when launching the game.
+    
+    .PARAMETER LaunchParameters
+    Additional parameters to pass to the game when launching it.
 
     .EXAMPLE
     LaunchSteamGame -ListGames
     LaunchSteamGame -AppId 440 -LaunchGame -WaitForExit
+    LaunchSteamGame -GameName "Portal" -LaunchGame -SteamAccountId "YourSteamUsername"
+    LaunchSteamGame -AppId 440 -LaunchGame -LaunchParameters "-windowed -noborder"
     #>
     [CmdletBinding(DefaultParameterSetName="List")]
     param (
@@ -1671,7 +1778,15 @@ function LaunchSteamGame {
         
         [Parameter(ParameterSetName="ByAppId")]
         [Parameter(ParameterSetName="ByName")]
-        [switch]$CopyLaunchCommand
+        [switch]$CopyLaunchCommand,
+        
+        [Parameter(ParameterSetName="ByAppId")]
+        [Parameter(ParameterSetName="ByName")]
+        [string]$SteamAccountId,
+        
+        [Parameter(ParameterSetName="ByAppId")]
+        [Parameter(ParameterSetName="ByName")]
+        [string]$LaunchParameters
     )
 
     # Get Steam installation path
@@ -1788,7 +1903,12 @@ function LaunchSteamGame {
         # In pass-through mode, automatically launch the game
         if ($Pass) {
             Write-LogMessage "Pass-through mode: Launching $($gameInfo.Name) (AppID: $($gameInfo.AppId))" -Type "Info"
-            $launched = Start-SteamGame -AppId $gameInfo.AppId
+            
+            # Use the LaunchParameters if provided, otherwise use empty string
+            $gameParams = if ($LaunchParameters) { $LaunchParameters } else { "" }
+            
+            # Launch the game with the specified parameters and account
+            $launched = Start-SteamGame -AppId $gameInfo.AppId -LaunchOptions $gameParams -SteamAccountId $SteamAccountId
             
             # Always wait for game to exit in pass-through mode
             if ($launched) {
@@ -1843,12 +1963,23 @@ function LaunchSteamGame {
             Write-Host ".\SteamLibrarian.ps1 -GameName `"$($gameInfo.Name.Split('\"')[0])`" -LaunchGame" -ForegroundColor Yellow
             Write-Host "For detailed information, use: " -NoNewline 
             Write-Host ".\SteamLibrarian.ps1 -GameName `"$($gameInfo.Name.Split('\"')[0])`" -ShowDetails" -ForegroundColor Yellow
+            
+            # Add hints for the new parameters
+            Write-Host "`nAdvanced launch options:" -ForegroundColor Cyan
+            Write-Host "  With Steam account: " -NoNewline 
+            Write-Host ".\SteamLibrarian.ps1 -GameName `"$($gameInfo.Name.Split('\"')[0])`" -LaunchGame -SteamAccountId `"YourSteamUsername`"" -ForegroundColor Yellow
+            Write-Host "  With launch parameters: " -NoNewline 
+            Write-Host ".\SteamLibrarian.ps1 -GameName `"$($gameInfo.Name.Split('\"')[0])`" -LaunchGame -LaunchParameters `"-windowed -width 1920`"" -ForegroundColor Yellow
             Write-Host ""
         }
         
         # Launch the game if requested
         if ($LaunchGame) {
-            $launched = Start-SteamGame -AppId $gameInfo.AppId
+            # Use the LaunchParameters if provided, otherwise use empty string
+            $gameParams = if ($LaunchParameters) { $LaunchParameters } else { "" }
+            
+            # Launch the game with the specified parameters and account
+            $launched = Start-SteamGame -AppId $gameInfo.AppId -LaunchOptions $gameParams -SteamAccountId $SteamAccountId
             
             # Always wait for the game to exit when launching
             # This addresses the requirement to wait until the game is closed
@@ -1868,7 +1999,7 @@ function LaunchSteamGame {
         
         # Copy launch command if requested
         if ($CopyLaunchCommand) {
-            Copy-LaunchCommand -AppId $gameInfo.AppId -GameName $gameInfo.Name -ScriptPath $PSCommandPath
+            Copy-LaunchCommand -AppId $gameInfo.AppId -GameName $gameInfo.Name -ScriptPath $PSCommandPath -SteamAccountId $SteamAccountId -LaunchParameters $LaunchParameters
         }
     }
     else {
@@ -1881,4 +2012,9 @@ function LaunchSteamGame {
 #endregion Main Function
 
 # Call the main function with script parameters
-LaunchSteamGame @PSBoundParameters
+# Handle case when no parameters are provided by defaulting to ListGames
+if ($PSBoundParameters.Count -eq 0) {
+    LaunchSteamGame -ListGames
+} else {
+    LaunchSteamGame @PSBoundParameters
+}
