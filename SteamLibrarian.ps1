@@ -1368,7 +1368,7 @@ function Show-GameDetails {
                                                 Write-Host "  Found executable files:" -ForegroundColor Green
                                                 $foundExes = $true
                                             }
-                                            Write-Host "  - `"$relativePath`" -ForegroundColor White
+                                            Write-Host "  - `"$relativePath`"" -ForegroundColor White
                                             Write-Host "    Size: $exeSize MB" -ForegroundColor DarkGray
                                         }
                                     }
@@ -1396,7 +1396,7 @@ function Show-GameDetails {
                                                 Write-Host "  Found executable files:" -ForegroundColor Green
                                                 $foundExes = $true
                                             }
-                                            Write-Host "  - `"$relativePath`" -ForegroundColor White
+                                            Write-Host "  - `"$relativePath`"" -ForegroundColor White
                                             Write-Host "    Size: $exeSize MB" -ForegroundColor DarkGray
                                         }
                                     }
@@ -1405,6 +1405,11 @@ function Show-GameDetails {
                             
                             if (-not $foundExes) {
                                 Write-Host "  No executable files found in game directories" -ForegroundColor Red
+                            }
+                        }
+                                        }
+                                    }
+                                }
                             }
                         }
                     } else {
@@ -1416,7 +1421,7 @@ function Show-GameDetails {
                 
                 # Try to use Steam nav console for executables
                 Write-Host "`n  Try using Steam nav console commands to get game details:" -ForegroundColor Yellow
-                Write-Host "  1. Open Steam > View > Console" -ForegroundColor Yellow
+                Write-Host "  1. Open Steam `> View `> Console" -ForegroundColor Yellow
                 Write-Host "  2. Type: app_info_print $($GameInfo.AppId)" -ForegroundColor Yellow
                 Write-Host "  3. Look for 'executable' field in the output" -ForegroundColor Yellow
             }
@@ -1425,7 +1430,7 @@ function Show-GameDetails {
             
             # Try to use Steam nav console for executables
             Write-Host "`n  Try using Steam nav console commands to get game details:" -ForegroundColor Yellow
-            Write-Host "  1. Open Steam > View > Console" -ForegroundColor Yellow
+            Write-Host "  1. Open Steam `> View `> Console" -ForegroundColor Yellow
             Write-Host "  2. Type: app_info_print $($GameInfo.AppId)" -ForegroundColor Yellow
             Write-Host "  3. Look for 'executable' field in the output" -ForegroundColor Yellow
         }
@@ -1464,7 +1469,7 @@ function Show-GameDetails {
         # Extract interesting fields from the manifest
         $extractManifestValue = {
             param($content, $fieldName)
-            $match = [regex]::Match($content, "(?s)`"$fieldName`"\s+`"([^`"]*)`"")
+            $match = [regex]::Match($content, '(?s)"' + $fieldName + '"\s+"([^"]*)"')
             if ($match.Success) { return $match.Groups[1].Value }
             return $null
         }
@@ -1545,7 +1550,7 @@ function Show-GameDetails {
                     $totalSize += $itemSize
                     $sizeInMB = [Math]::Round($itemSize / 1MB, 2)
                     Write-Host "  `"$($item.Name)`"" -NoNewline 
-                    Write-Host " ($itemType, $sizeInMB MB)" -ForegroundColor DarkGray
+                    Write-Host " ($itemType, $($sizeInMB) MB)" -ForegroundColor DarkGray
                 }
                 
                 if ($topLevelItems.Count -eq 10) {
